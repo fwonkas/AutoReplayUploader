@@ -25,6 +25,7 @@ private:
 	std::shared_ptr<bool> uploadToCalculated = std::make_shared<bool>(false);
 	std::shared_ptr<bool> uploadToBallchasing = std::make_shared<bool>(false);
 	std::shared_ptr<bool> uploadToBallchasingMMR = std::make_shared<bool>(false);
+	std::shared_ptr<bool> uploadOnlineFreeplay = std::make_shared<bool>(false);
 
 	// Replay name template variables
 	std::shared_ptr<int> templateSequence = std::make_shared<int>(0);

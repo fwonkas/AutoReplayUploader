@@ -32,6 +32,7 @@ BAKKESMOD_PLUGIN(AutoReplayUploaderPlugin, "Auto replay uploader plugin", "0.2",
 #define CVAR_BALLCHASING_AUTH_TEST_RESULT "cl_autoreplayupload_ballchasing_testkeyresult"
 #define CVAR_BALLCHASING_REPLAY_VISIBILITY "cl_autoreplayupload_ballchasing_visibility"
 #define CVAR_CALCULATED_REPLAY_VISIBILITY "cl_autoreplayupload_calculated_visibility"
+#define CVAR_UPLOAD_ONLINE_FREEPLAY "cl_autoreplayupload_online_freeplay"
 
 Player ConstructPlayer(PriWrapper wrapper)
 {
@@ -39,7 +40,7 @@ Player ConstructPlayer(PriWrapper wrapper)
 	if (!wrapper.IsNull())
 	{
 		p.Name = wrapper.GetPlayerName().ToString();
-		p.UniqueId = wrapper.GetUniqueId().ID;
+		p.UniqueId = wrapper.GetUniqueIdWrapper().GetUID();
 		p.Team = wrapper.GetTeamNum();
 		p.Score = wrapper.GetScore();
 		p.Goals = wrapper.GetMatchGoals();
@@ -61,10 +62,10 @@ struct MMRCacheWrapper {
 	MMRData data;
 	bool addToAfter;
 
-	void AddPlayer(std::string name, SteamID id, float mmr, SkillRank extra, int platform) {
+	void AddPlayer(std::string name, UniqueIDWrapper id, float mmr, SkillRank extra, int platform) {
 		if (mmr < 101) return;
 		MMR newValue{ extra.Tier, extra.Division, extra.MatchesPlayed, mmr };
-		std::string sid = std::to_string(id.ID);
+		std::string sid = std::to_string(id.GetUID());
 		PlayerMMRData newPlayerData{ platform, sid, newValue };
 		newPlayerData.debug = name;
 		auto it = std::find_if(data.players.begin(), data.players.end(), [&](PlayerMMRData& p) { return p.id == sid; });
@@ -229,6 +230,9 @@ void AutoReplayUploaderPlugin::InitializeVariables()
 	// Set the default status of uploading replay to false
 	needToUploadReplay = false;
  
+	// Default to not uploading Online Freeplay replays
+	cvarManager->registerCvar(CVAR_UPLOAD_ONLINE_FREEPLAY, "0", "Upload replays from online freeplay matches", true, true, 0, true, 1).bindTo(uploadOnlineFreeplay);
+
 	// Calculated variables
 	cvarManager->registerCvar(CVAR_UPLOAD_TO_CALCULATED, "0", "Upload to replays to calculated.gg automatically", true, true, 0, true, 1).bindTo(uploadToCalculated);		
 	cvarManager->registerCvar(CVAR_CALCULATED_REPLAY_VISIBILITY, "DEFAULT", "Replay visibility when uploading to calculated.gg", false, false, 0, false, 0, true).bindTo(calculated->visibility);
@@ -414,13 +418,13 @@ void AutoReplayUploaderPlugin::OnMMRSync()
 	cvarManager->log("got " + std::to_string(players.Count()) + " players");
 	for (size_t i = 0; i < players.Count(); i++)
 	{
-		auto player = players.Get(i);
+		auto player = players.Get(static_cast<int>(i));
 		if (!player) continue;
 		auto playerName = player.GetPlayerName().ToString();
 		auto platform = player.GetPlatform();
 		//cvarManager->log("Getting MMR for :  "+ playerName);
-		auto playerSteam = player.GetUniqueId();
-		if (playerSteam.ID == 0) continue; //bot
+		auto playerSteam = player.GetUniqueIdWrapper();
+		if (playerSteam.GetUID() == 0) continue; //bot
 		if (!mmrWrapper.IsSyncing(playerSteam)) {
 			auto mmr = mmrWrapper.GetPlayerMMR(playerSteam, playlist);
 			auto extra = mmrWrapper.GetPlayerRank(playerSteam, playlist);
@@ -450,8 +454,10 @@ void AutoReplayUploaderPlugin::GetPlayerData(ServerWrapper caller, void* params,
 	//Function GameEvent_Soccar_TA.Active.StartRound -event will fire in all modes
 	//like freeplay, custom training etc. Set the needToUploadReplay flag replay only 
 	//if we are in an online game.
-	if (gameWrapper->IsInOnlineGame()) {
-	    needToUploadReplay = true;
+	int playlistID = caller.GetPlaylist().GetPlaylistId();
+	bool uploadReplay = gameWrapper->IsInOnlineGame() && ((playlistID == 73) ? *uploadOnlineFreeplay : false);
+	if (uploadReplay) {
+		needToUploadReplay = true;
 	} else {
 		//If we are not in online game, we are in freeplay, custom training etc
 		// We will set the needToUploadReplay flag to false and no need to save the player data.
