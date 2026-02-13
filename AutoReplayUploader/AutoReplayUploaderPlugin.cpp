@@ -451,20 +451,18 @@ void AutoReplayUploaderPlugin::GetPlayerData(ServerWrapper caller, void* params,
     * when uploading the replay, and that is why we save it in at start of the match.        *
     *****************************************************************************************/
 	
-	//Function GameEvent_Soccar_TA.Active.StartRound -event will fire in all modes
-	//like freeplay, custom training etc. Set the needToUploadReplay flag replay only 
-	//if we are in an online game.
+	// Function GameEvent_Soccar_TA.Active.StartRound -event will fire in all modes
+	// like freeplay, custom training etc. Set the needToUploadReplay flag replay only 
+	// if we are in an online game. Online freeplay is also an online game mode, but we will
+	// only upload those replays if CVAR_UPLOAD_ONLINE_FREEPLAY (bound to uploadOnlineFreeplay)
+	// has been set to true.
+
 	int playlistID = caller.GetPlaylist().GetPlaylistId();
-	bool uploadReplay = gameWrapper->IsInOnlineGame() && ((playlistID == 73) ? *uploadOnlineFreeplay : false);
-	if (uploadReplay) {
-		needToUploadReplay = true;
-	} else {
-		//If we are not in online game, we are in freeplay, custom training etc
-		// We will set the needToUploadReplay flag to false and no need to save the player data.
-	    needToUploadReplay = false;
-	    return;
+	needToUploadReplay = gameWrapper->IsInOnlineGame() && (playlistID != ONLINE_FREEPLAY_PLAYLIST_ID ? true : *uploadOnlineFreeplay);
+	if (!needToUploadReplay) {
+		return;
 	}
-	
+
 	// We are in online game and now storing some important player data, if needed after the game
 	// When uploading the replay.
 	backupPlayerSteamID = std::to_string(gameWrapper->GetSteamID());
